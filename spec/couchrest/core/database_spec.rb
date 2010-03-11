@@ -551,6 +551,53 @@ describe CouchRest::Database do
     
   end
   
+  describe  "UPDATE existing document" do
+    before :each do
+      @id = @db.save_doc({
+          'article' => 'Pete Doherty Kicked Out For Nazi Anthem',
+          'upvotes' => 10,
+          'link' => 'http://beatcrave.com/2009-11-30/pete-doherty-kicked-out-for-nazi-anthem/'})['id']
+    end
+    it "should work under normal conditions" do
+      @db.update_doc @id do |doc|
+        doc['upvotes'] += 1
+        doc
+      end
+      @db.get(@id)['upvotes'].should == 11
+    end
+    it "should fail if update_limit is reached" do
+      lambda do
+        @db.update_doc @id do |doc|
+          # modify and save the doc so that a collision happens
+          conflicting_doc = @db.get @id
+          conflicting_doc['upvotes'] += 1
+          @db.save_doc conflicting_doc
+        
+          # then try saving it through the update
+          doc['upvotes'] += 1
+          doc
+        end
+      end.should raise_error(RestClient::RequestFailed)
+    end
+    it "should not fail if update_limit is not reached" do
+      limit = 5
+      lambda do
+      @db.update_doc @id do |doc|
+          # same as the last spec except we're only forcing 5 conflicts
+          if limit > 0
+            conflicting_doc = @db.get @id
+            conflicting_doc['upvotes'] += 1
+            @db.save_doc conflicting_doc
+            limit -= 1
+          end
+          doc['upvotes'] += 1
+          doc
+        end
+      end.should_not raise_error
+      @db.get(@id)['upvotes'].should == 16
+    end
+  end
+  
   describe "COPY existing document" do
     before :each do
       @r = @db.save_doc({'artist' => 'Zappa', 'title' => 'Muffin Man'})
@@ -656,12 +703,12 @@ describe CouchRest::Database do
     end
   end
   
-  describe "replicating a database" do
+  describe "simply replicating a database" do
     before do
       @db.save_doc({'_id' => 'test_doc', 'some-value' => 'foo'})
-      @other_db = @cr.database 'couchrest-test-replication'
+      @other_db = @cr.database REPLICATIONDB
       @other_db.delete! rescue nil
-      @other_db = @cr.create_db 'couchrest-test-replication'
+      @other_db = @cr.create_db REPLICATIONDB
     end
 
     describe "via pulling" do
@@ -683,6 +730,53 @@ describe CouchRest::Database do
       it "copies the document to the other database" do
         doc = @other_db.get('test_doc')
         doc['some-value'].should == 'foo'
+      end
+    end
+  end
+    
+  describe "continuously replicating a database" do
+    before do
+      @db.save_doc({'_id' => 'test_doc', 'some-value' => 'foo'})
+      @other_db = @cr.database REPLICATIONDB
+      @other_db.delete! rescue nil
+      @other_db = @cr.create_db REPLICATIONDB
+    end
+
+    describe "via pulling" do
+      before do
+        @other_db.replicate_from @db, true
+      end
+      
+      it "contains the document from the original database" do
+        sleep(1) # Allow some time to replicate
+        doc = @other_db.get('test_doc')
+        doc['some-value'].should == 'foo'
+      end
+      
+      it "contains documents saved after replication initiated" do
+        @db.save_doc({'_id' => 'test_doc_after', 'some-value' => 'bar'})
+        sleep(1) # Allow some time to replicate
+        doc = @other_db.get('test_doc_after')
+        doc['some-value'].should == 'bar'
+      end
+    end
+    
+    describe "via pushing" do
+      before do
+        @db.replicate_to @other_db, true
+      end
+      
+      it "copies the document to the other database" do
+        sleep(1) # Allow some time to replicate
+        doc = @other_db.get('test_doc')
+        doc['some-value'].should == 'foo'
+      end
+      
+      it "copies documents saved after replication initiated" do
+        @db.save_doc({'_id' => 'test_doc_after', 'some-value' => 'bar'})
+        sleep(1) # Allow some time to replicate
+        doc = @other_db.get('test_doc_after')
+        doc['some-value'].should == 'bar'
       end
     end
   end
@@ -716,7 +810,7 @@ describe CouchRest::Database do
     
     it "should recreate a db even tho it doesn't exist" do
       @cr.databases.should_not include(@db2.name)
-      begin @db2.recreate! rescue nil end
+      @db2.recreate!
       @cr.databases.should include(@db2.name)
     end
     
