@@ -71,11 +71,6 @@ module CouchRest
           CollectionProxy.new(@database, design_doc, search_name, search_options, self, :search)
         end
 
-        def create_search_collection_proxy(options)
-          design_doc, search_name, search_options = parse_search_options(options)
-          CollectionProxy.new(@database, design_doc, search_name, search_options, self, :search)
-        end
-
         def parse_view_options(options)
           design_doc = options.delete(:design_doc)
           raise ArgumentError, 'design_doc is required' if design_doc.nil?
