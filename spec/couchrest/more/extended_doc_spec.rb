@@ -465,7 +465,29 @@ describe "ExtendedDocument" do
       saved_obj.set_by_proc.should be_an_instance_of(Time)
     end
   end
-  
+
+  describe "retrieving documents in bulk" do
+    before(:all) do
+      obj1 = WithDefaultValues.new
+      obj2 = WithDefaultValues.new
+      obj3 = WithDefaultValues.new
+      [obj1, obj2, obj3].each { |obj| obj.save }
+      @obj1 = WithDefaultValues.get(obj1.id)
+      @obj2 = WithDefaultValues.get(obj2.id)
+      @obj3 = WithDefaultValues.get(obj3.id)
+    end
+
+    it "should be able to retrive documents in bulk" do
+      docs = WithDefaultValues.get_bulk([@obj1.id, @obj2.id, @obj3.id])
+      docs.should == [@obj1, @obj2, @obj3]
+    end
+
+    it "should return nil for a bogus id" do
+      docs = WithDefaultValues.get_bulk([@obj1.id, "bogus", @obj3.id])
+      docs.should == [@obj1, nil, @obj3]
+    end
+  end
+
   describe "saving a model" do
     before(:all) do
       @sobj = Basic.new

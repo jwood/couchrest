@@ -72,6 +72,25 @@ module CouchRest
           doc = db.get id
           create_from_database(doc)
         end
+
+        # Load one or more documents from the database by id, in a single
+        # request
+        #
+        # ==== Returns
+        # An array of Object:: for the requested documents.  If the
+        # document could not be found, nil will be returned in its place.
+        #
+        # === Parameters
+        # ids<Array>:: An array of document ids
+        # db<Database>:: optional option to pass a custom database to use
+        def get_bulk(ids, db = database)
+          docs = []
+          result = db.get_bulk ids
+          result['rows'].each do |row|
+            docs << (row['doc'].nil? ? nil : create_from_database(row['doc']))
+          end
+          docs
+        end
         
       end
       
